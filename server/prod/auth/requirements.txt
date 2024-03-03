@@ -1,0 +1,5 @@
+Flask==3.0.2
+requests==2.25.1
+Werkzeug==3.0.1
+google-cloud-firestore==2.15.0
+functions-framework>=3.4.0
