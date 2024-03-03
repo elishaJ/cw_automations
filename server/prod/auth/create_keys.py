@@ -1,9 +1,10 @@
 from google.cloud import firestore
 from requests.exceptions import RequestException
+from dotenv import load_dotenv
 
-def export_keys(key_ids, email):
+def export_keys(key_ids, email, server_ids):
     # Load environment variables from .env file
-    #load_dotenv() 
+    load_dotenv() 
     # Set up Firestore client
     db = firestore.Client()
     try:
@@ -18,9 +19,10 @@ def export_keys(key_ids, email):
 
         # Store keys and other data in the document
         data = {
+            'email': email,
             'task_id': task_id,
+            'server_id': server_ids,
             'key_id': key_ids,
-            'email': email
         }
 
         # Set the document data

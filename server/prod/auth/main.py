@@ -1,6 +1,6 @@
 import functions_framework
 import requests
-from export_keys import export_keys
+from create_keys import export_keys
 
 from time import sleep
 from flask import Flask, jsonify, request
@@ -100,7 +100,7 @@ def create_ssh_keys_on_servers(access_token, server_ids, pub_key):
     return key_ids, error
 
 @app.route('/auth', methods=['POST'])
-def main(request):  
+def main():  
     if request.method == 'POST':   
         server_id, project_id, pub_key, email = get_params(request)
 
@@ -131,7 +131,7 @@ def main(request):
                 
                 # SSH setup successful. Return SSH key IDs
                 else:
-                    task_id = export_keys(key_ids, email)
+                    task_id = export_keys(key_ids, email, project_server_ids)
                     return jsonify({"task_id": task_id}), 200
             
             # Error fetching server IDs
@@ -153,7 +153,7 @@ def main(request):
                 
                 # SSH setup successful. Return SSH key IDs
                 else:
-                    task_id = export_keys(key_ids, email)
+                    task_id = export_keys(key_ids, email, server_ids)
                     return jsonify({"task_id": task_id}), 200
             else:
                 return error, 404
@@ -174,7 +174,7 @@ def main(request):
                 
                 # SSH setup successful. Return SSH key IDs
                 else:
-                    task_id = export_keys(key_ids, email)
+                    task_id = export_keys(key_ids, email, server_ids)
                     return jsonify({"task_id": task_id}), 200
             
             # Error fetching server IDs
