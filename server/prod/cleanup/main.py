@@ -1,6 +1,5 @@
 # import functions_framework
 import requests
-import os
 import warnings
 from google.cloud import firestore
 from flask import Flask, jsonify, request
@@ -15,7 +14,6 @@ BASE_URL = "https://api.cloudways.com/api/v1"
 EZ_API = 'https://us-central1-cw-automations.cloudfunctions.net'
 
 def get_params(request):
-    #email = request.args.get('email') or os.getenv('CLOUDWAYS_EMAIL')
     task_id = request.args.get('task_id')
     
     # Check if the request contains JSON data
@@ -26,7 +24,6 @@ def get_params(request):
             task_id = task_id or data.get('task_id')
     
     elif (not task_id) and request.content_type == 'application/x-www-form-urlencoded':
-        #email = request.form.get('email')
         task_id =  request.form.get('task_id')
     return task_id
 
@@ -95,7 +92,6 @@ def main():
                     return jsonify({"error": db_error}), 500
 
             else:
-                # return jsonify({"error": deletion_error}), 401
                 return deletion_error, 401
             
     else:

@@ -1,6 +1,5 @@
 from google.cloud import firestore
 import warnings
-import json
 from dotenv import load_dotenv
 
 # Suppress UserWarning from firestore
