@@ -1,10 +1,11 @@
-import functions_framework
+# import functions_framework
 import requests
 import os
 import warnings
 from google.cloud import firestore
 from flask import Flask, jsonify, request
-from delete_keys import delete_keys 
+from delete_keys import delete_task
+from key_info import key_info
 
 # Suppress UserWarning from firestore
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -14,20 +15,20 @@ BASE_URL = "https://api.cloudways.com/api/v1"
 EZ_API = 'https://us-central1-cw-automations.cloudfunctions.net'
 
 def get_params(request):
-    email = request.args.get('email') or os.getenv('CLOUDWAYS_EMAIL')
+    #email = request.args.get('email') or os.getenv('CLOUDWAYS_EMAIL')
     task_id = request.args.get('task_id')
     
     # Check if the request contains JSON data
-    if (not email or not task_id) and request.content_type == 'application/json':
+    if (not task_id) and request.content_type == 'application/json':
         data = request.json
         if data:
-            email = email or data.get('email')
+            #email = email or data.get('email')
             task_id = task_id or data.get('task_id')
     
-    elif (not email or not task_id) and request.content_type == 'application/x-www-form-urlencoded':
-        email = request.form.get('email')
+    elif (not task_id) and request.content_type == 'application/x-www-form-urlencoded':
+        #email = request.form.get('email')
         task_id =  request.form.get('task_id')
-    return task_id, email
+    return task_id
 
 # Function to get Oauth access token from Authorization header
 def extract_access_token(request):
@@ -50,13 +51,26 @@ def verify_access_token(access_token):
     else:
         return error
 
+def delete_ssh_key(access_token, server_ids, key_ids):
+    error = None
+    for i in range(len(key_ids)):
+        headers = {"Authorization": "Bearer " + access_token}
+        response = requests.delete(
+            f"{BASE_URL}/ssh_key/{key_ids[i]}?server_id={server_ids[i]}",
+            headers=headers
+        )
+        if response.status_code != 200:
+            error = response.text
+            return error
+    return error
+
 @app.route('/cleanup', methods=['DELETE'])
-def main(request):  
+def main():  
     if request.method == 'DELETE':   
-        task_id, email = get_params(request)
+        task_id = get_params(request)  # Adjusted to retrieve only task_id
     
-        if not email or not task_id:
-            return jsonify({"error": "Invalid request. Email and Task ID is required"}), 400
+        if not task_id:
+            return jsonify({"error": "Invalid request. Task ID is required"}), 400
 
         # Fetch access token from request
         access_token = extract_access_token(request)
@@ -68,8 +82,26 @@ def main(request):
         if token_error:
             return token_error, 400
         else:
-            response = delete_keys(task_id, email)
-            return response
+            key_ids, server_ids, search_error = key_info(task_id)
+            if search_error: 
+                return jsonify({"error": search_error}), 404 
+            
+            db_error = delete_task(task_id)
+            deletion_error = delete_ssh_key(access_token, server_ids, key_ids)
+            
+            if not deletion_error and not db_error:
+                return jsonify({"success": "Keys deleted successfully"}), 200
+            else:
+                error = []
+                if deletion_error:
+                    error.append(error, deletion_error)
+                    #return jsonify({"error": deletion_error}), 500
+            
+                if db_error:
+                    error.append(error, db_error)
+                    #return jsonify({"error": db_error})
+                return jsonify({"error": error})
+            
             
     else:
         return jsonify({"error": "Invalid route/request method"}), 404
