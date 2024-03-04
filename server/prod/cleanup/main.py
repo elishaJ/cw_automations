@@ -86,22 +86,17 @@ def main():
             if search_error: 
                 return jsonify({"error": search_error}), 404 
             
-            db_error = delete_task(task_id)
             deletion_error = delete_ssh_key(access_token, server_ids, key_ids)
-            
-            if not deletion_error and not db_error:
-                return jsonify({"success": "Keys deleted successfully"}), 200
+            if not deletion_error: 
+                db_error = delete_task(task_id)
+                if not db_error:
+                    return jsonify({"success": "Keys deleted successfully"}), 200
+                else:
+                    return jsonify({"error": db_error}), 500
+
             else:
-                error = []
-                if deletion_error:
-                    error.append(error, deletion_error)
-                    #return jsonify({"error": deletion_error}), 500
-            
-                if db_error:
-                    error.append(error, db_error)
-                    #return jsonify({"error": db_error})
-                return jsonify({"error": error})
-            
+                # return jsonify({"error": deletion_error}), 401
+                return deletion_error, 401
             
     else:
         return jsonify({"error": "Invalid route/request method"}), 404

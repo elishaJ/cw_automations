@@ -1,6 +1,7 @@
 from google.cloud import firestore
 import warnings
 import json
+from dotenv import load_dotenv
 
 # Suppress UserWarning from firestore
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -8,6 +9,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def delete_task(task_id):
     db_error=None
     try:
+        load_dotenv() 
         # Set up Firestore client with credentials from environment variable
         db = firestore.Client()
 
