@@ -1,4 +1,5 @@
 #!/bin/bash
+clear
 _bold=$(tput bold)
 _underline=$(tput sgr 0 1)
 _red=$(tput setaf 1)
@@ -181,6 +182,8 @@ create_app_users() {
 
         _note "Putting script to sleep to respect API rate limit."
         sleep 5
+    _success "App users created for all project applications."
+    export_app_users
     done
 }
 
@@ -188,6 +191,7 @@ create_app_users() {
 export_app_users(){
     # Export app users in JSON format and write it to the file
     printf '{"app_users":[%s]}\n' "$(IFS=','; echo "${app_users[*]}")" > app_users.json
+    _note "Users exported in app_users.json file."
 }
 get_user_credentials
 get_token
@@ -196,7 +200,3 @@ verify_project_id
 get_app_password
 get_apps
 create_app_users
-export_app_users
-
-_success "App users created for all project applications."
-_note "Users exported in app_users.json file."
