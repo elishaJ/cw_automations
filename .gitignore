@@ -73,3 +73,4 @@ cython_debug/
 **/stage/
 **/sandbox/
 **/.keys/
+client/prod/project_management/api/app_users.json
