@@ -11,8 +11,6 @@ BASE_URL="https://api.cloudways.com/api/v1"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
 app_users=()
 dir=$(pwd)
-retry_count=0
-max_retries=10
 is_deleted=true
 
 function _success()

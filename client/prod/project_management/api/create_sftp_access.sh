@@ -11,6 +11,8 @@ BASE_URL="https://api.cloudways.com/api/v1"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
 app_users=()
 usercount=0
+max_retries=10
+is_created=true
 
 function _success()
 {
@@ -135,9 +137,11 @@ create_app_users() {
             --header 'Authorization: Bearer '$access_token'' \
             -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
 
+
+
         # Handle case where operation is already in progress
         retry_count=0
-        while [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]]; do
+        while [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]] && [ $retry_count -lt $max_retries ]; do
             _note "An operation is already in progress on Server: $server"
             echo ""
             _note "Putting the script to sleep.."
@@ -151,6 +155,7 @@ create_app_users() {
                 --header 'Accept: application/json' \
                 --header 'Authorization: Bearer '$access_token'' \
                 -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
+            ((retry_count++))
         done
 
         # Check if response contains status field
@@ -187,10 +192,19 @@ create_app_users() {
                 sleep 2
                 create_app_users
                 return
+
+            elif [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]]; then
+                _error "Operation failed after $max_retries retries. Another operation is running on the server."
+                _error "Failed to create $username"
+                echo "$server: $app" >> "$dir/creation_error.txt"
+                is_creation=false
+                continue
             else
                 # Print the message from the response directly
                 _error "Failed to create user $username"
                 echo "$response"
+                echo "$server: $app" >> "$dir/creation_error.txt"
+                is_created=false
                 return
             fi
         fi
@@ -198,8 +212,15 @@ create_app_users() {
         _note "Putting script to sleep to respect API rate limit."
         sleep 5
     done
-    _success "App users created for all project applications."
-    export_app_users
+
+    if [ "$is_created" == true ]; then
+        _success "App users created for all project applications."
+        export_app_users
+    else
+        sleep 3
+        echo ""
+        _note "Failed user creation exported in creation_error.txt"
+    fi
 }
 
 export_app_users(){
