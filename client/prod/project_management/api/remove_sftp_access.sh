@@ -50,7 +50,8 @@ get_user_credentials() {
 
 get_token() {
     _note "Retrieving access token"
-    response=$(curl -s -X POST --location "$qwik_api/token" \
+
+    response=$(curl -s -X POST --location "$BASE_URL/oauth/access_token" \
         -w "%{http_code}" \
         --header 'Content-Type: application/x-www-form-urlencoded' \
         --data-urlencode 'email='$email'' \
@@ -65,8 +66,24 @@ get_token() {
         get_user_credentials
         get_token
     else
-        access_token=$(echo "$body" | jq -r '.[]')
+        # Parse the access token and set expiry time to 10 seconds
+        access_token=$(echo "$body" | jq -r '.access_token')
+        expires_in=$(echo "$body" | jq -r '.expires_in')
+        expiry_time=$(( $(date +%s) + $expires_in ))
         _success "Access token generated."
+    fi
+}
+
+check_token_validity() {
+    current_time=$(date +%s)
+    if [ "$current_time" -ge "$expiry_time" ]; then       
+        validity="invalid"
+        is_valid=false
+        # echo "Token has expired"
+        get_token
+    else
+        # echo "Token is valid"
+        is_valid=true
     fi
 }
 
@@ -95,6 +112,7 @@ delete_app_users() {
         echo ""
         _note "Running for $server: $app"
 
+        check_token_validity
         response=$(curl -s -X DELETE --location "$BASE_URL/app/creds/$app_cred_id" \
         --header 'Content-Type: application/x-www-form-urlencoded' \
         --header 'Accept: application/json' \
@@ -114,6 +132,7 @@ delete_app_users() {
                 _note "Trying again..."
                 echo ""
                 _note "Running for $server: $app"
+                check_token_validity
                 response=$(curl -s -X DELETE --location "$BASE_URL/app/creds/$app_cred_id" \
                     --header 'Content-Type: application/x-www-form-urlencoded' \
                     --header 'Accept: application/json' \
