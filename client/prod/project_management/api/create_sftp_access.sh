@@ -11,6 +11,7 @@ BASE_URL="https://api.cloudways.com/api/v1"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
 app_users=()
 usercount=0
+
 function _success()
 {
 	printf '%s✔ %s%s\n' "$_green" "$@" "$_reset"
@@ -26,31 +27,31 @@ function _note()
 }
 
 get_email() {
-    read -p "Enter primary email: " email
     if [ -z $email ]; then
+    read -p "Enter primary email: " email
         get_email
     fi
 }
 
 get_apiKey() {
-    read -sp "Enter API key: " api_key
-    echo " "
     if [ -z $api_key ]; then
+        read -sp "Enter API key: " api_key
+        echo " "
         get_apiKey
     fi
 }
 
 get_app_password() {
-    read -sp "Enter password for app users: " password
-    echo " "
     if [ -z $password ]; then
+        read -sp "Enter password for app users: " password
+        echo " "
         get_app_password
     fi
 }
 
 get_project_id() {
-    read -p "Enter project ID: " project_id
     if [ -z $project_id ]; then
+        read -p "Enter project ID: " project_id
         get_project_id
     fi
 }
@@ -134,49 +135,8 @@ create_app_users() {
             --header 'Authorization: Bearer '$access_token'' \
             -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
 
-        # Check if response contains status field
-        if [[ "$(echo "$response" | jq -r '.status')" == "true" ]]; then
-            _success "User $username created successfully."
-
-            # Extract app_cred_id from response
-            app_cred_id=$(echo "$response" | jq -r '.app_cred_id')
-
-            # Append app user object to array
-            app_users+=( "{\"app_id\": \"$app\", \"server_id\": \"$server\", \"app_cred_id\": \"$app_cred_id\"}" )
-        else
-            # Check if response contains password policy validation error
-            if [[ "$(echo "$response" | jq -r '.password[0].code')" == "passwordpolicy" ]]; then
-                # _note "Password policy validation error found. Invoking get_app_password function."
-                _error "Failed to create app user $username"
-                echo "$response"
-                sleep 2
-                _note "Password policy validation error found. Provide a stronger password"
-                sleep 2
-                get_app_password
-
-                # Fetch new password and rerun create_app_users with the new password
-                create_app_users 
-                return  # Exit the loop after rerunning create_app_users with the new password
-            
-            elif [[ "$(echo "$response" | jq -r '.message')" == "username already exists" ]]; then
-                _error "Failed to create app user"
-                echo "$response"
-                # echo "Changing app username."
-                let "usercount=usercount+1"
-                sleep 2
-                _note "Changing username to admin$usercount"
-                sleep 2
-                create_app_users
-                return
-            else
-                # Print the message from the response directly
-                _error "Failed to create user $username"
-                echo "$response"
-                return
-            fi
-        fi
-
         # Handle case where operation is already in progress
+        retry_count=0
         while [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]]; do
             _note "An operation is already in progress on Server: $server"
             echo ""
@@ -193,13 +153,54 @@ create_app_users() {
                 -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
         done
 
+        # Check if response contains status field
+        if [[ "$(echo "$response" | jq -r '.status')" == "true" ]]; then
+            _success "User $username created successfully."
+
+            # Extract app_cred_id from response
+            app_cred_id=$(echo "$response" | jq -r '.app_cred_id')
+
+            # Append app user object to array
+            app_users+=( "{\"app_id\": \"$app\", \"server_id\": \"$server\", \"username\": \"$username\", \"app_cred_id\": \"$app_cred_id\"}" )
+        else
+            # Check if response contains password policy validation error
+            if [[ "$(echo "$response" | jq -r '.password[0].code')" == "passwordpolicy" ]]; then
+                # _note "Password policy validation error found. Invoking get_app_password function."
+                _error "Failed to create user $username"
+                echo "$response"
+                sleep 2
+                _note "Password policy validation error found. Provide a stronger password"
+                sleep 2
+                get_app_password
+
+                # Fetch new password and rerun create_app_users with the new password
+                create_app_users 
+                return  # Exit the loop after rerunning create_app_users with the new password
+            
+            elif [[ "$(echo "$response" | jq -r '.message')" == "username already exists" ]]; then
+                _error "Failed to create user $username"
+                echo "$response"
+                # echo "Changing app username."
+                let "usercount=usercount+1"
+                sleep 2
+                _note "Changing username to admin$usercount"
+                sleep 2
+                create_app_users
+                return
+            else
+                # Print the message from the response directly
+                _error "Failed to create user $username"
+                echo "$response"
+                return
+            fi
+        fi
+
         _note "Putting script to sleep to respect API rate limit."
         sleep 5
     done
     _success "App users created for all project applications."
     export_app_users
 }
-
 
 export_app_users(){
     # Export app users in JSON format and write it to the file

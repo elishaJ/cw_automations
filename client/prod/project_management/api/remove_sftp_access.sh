@@ -10,6 +10,10 @@ _reset=$(tput sgr0)
 BASE_URL="https://api.cloudways.com/api/v1"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
 app_users=()
+dir=$(pwd)
+retry_count=0
+max_retries=10
+is_deleted=true
 
 function _success()
 {
@@ -26,33 +30,18 @@ function _note()
 }
 
 get_email() {
-    read -p "Enter primary email: " email
+    
     if [ -z $email ]; then
+        read -p "Enter primary email: " email
         get_email
     fi
 }
 
 get_apiKey() {
-    read -sp "Enter API key: " api_key
-    echo " "
     if [ -z $api_key ]; then
+        read -sp "Enter API key: " api_key
+        echo " "
         get_apiKey
-    fi
-}
-
-get_app_password() {
-    read -sp "Enter password for app users: " password
-    echo " "
-    if [ -z $password ]; then
-        get_app_password
-    fi
-}
-
-get_project_id() {
-    echo " "
-    read -p "Enter project ID: " project_id
-    if [ -z $project_id ]; then
-        get_project_id
     fi
 }
 
@@ -60,25 +49,6 @@ get_user_credentials() {
     get_email
     get_apiKey
 }
-
-verify_project_id() {
-    _note "Verifying project ID"
-    
-    # Fetch all project IDs
-    response=$(curl -s -X GET --location "$BASE_URL/project" \
-        --header 'Authorization: Bearer '$access_token'' \
-        --header 'Accept: application/json')
-
-    # Check if the project_id exists in the list of projects
-    if jq -e ".projects[] | select(.id == \"$project_id\")" <<< "$response" > /dev/null; then
-        _success "Project ID verified."
-    else
-        _error "Project ID $project_id does not exist."
-        get_project_id
-        verify_project_id
-    fi
-}
-
 
 get_token() {
     _note "Retrieving access token"
@@ -102,101 +72,84 @@ get_token() {
     fi
 }
 
-get_apps() {
-    _note "Fetching app info"
-    apps_response=$(curl -s --location ''$qwik_api'/apps?project_id='$project_id'' \
-        --header 'Authorization: Bearer '$access_token'')
+get_app_user_ids() {
+    _note "Fetch data from app_users.json "
+    sleep 2
+    if ! [ -f "$dir/app_users.json" ]; then
+        _error "File app_users.json not found. Place JSON file containing app user IDs in current directory."
+        exit
 
-    app_ids=$(echo "$apps_response" | jq -r '.apps[].id')
-    server_ids=$(echo "$apps_response" | jq -r '.apps[].server_id')
-    sys_users=$(echo "$apps_response" | jq -r '.apps[].sys_user')
-
-    IFS=$'\n' read -d '' -r -a app_ids_array <<<"$app_ids"
-    IFS=$'\n' read -d '' -r -a server_ids_array <<<"$server_ids"
-    IFS=$'\n' read -d '' -r -a sys_users_array <<<"$sys_users"
+    else
+        readarray -t app_ids < <(cat $dir/app_users.json | jq -r '.app_users[].app_id')
+        readarray -t server_ids < <(cat $dir/app_users.json | jq -r '.app_users[].server_id')
+        readarray -t app_cred_ids < <(cat $dir/app_users.json | jq -r '.app_users[].app_cred_id')
+        readarray -t usernames < <(cat $dir/app_users.json | jq -r '.app_users[].username')
+    fi
 }
 
-create_app_users() {
-    for i in "${!server_ids_array[@]}"; do 
-        app=${app_ids_array[i]}
-        server=${server_ids_array[i]}
-        db=${sys_users_array[i]}
-        username="$db-appadmin"
+delete_app_users() {
+    for i in "${!app_cred_ids[@]}"; do 
+        app=${app_ids[i]}
+        server=${server_ids[i]}
+        app_cred_id=${app_cred_ids[i]}
+        username=${usernames[i]}
+
         echo ""
         _note "Running for $server: $app"
 
-        response="$(curl -s -X POST --location "$BASE_URL/app/creds" \
-            --header 'Content-Type: application/x-www-form-urlencoded' \
-            --header 'Accept: application/json' \
-            --header 'Authorization: Bearer '$access_token'' \
-            -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
+        response=$(curl -s -X DELETE --location "$BASE_URL/app/creds/$app_cred_id" \
+        --header 'Content-Type: application/x-www-form-urlencoded' \
+        --header 'Accept: application/json' \
+        --header 'Authorization: Bearer '$access_token'' \
+        -d 'server_id='$server'&app_id='$app'')
 
-        # Check if response contains status field
-        if [[ "$(echo "$response" | jq -r '.status')" == "true" ]]; then
-            _success "App user created successfully."
-
-            # Extract app_cred_id from response
-            app_cred_id=$(echo "$response" | jq -r '.app_cred_id')
-
-            # Append app user object to array
-            app_users+=( "{\"app_id\": \"$app\", \"server_id\": \"$server\", \"app_cred_id\": \"$app_cred_id\"}" )
+        if [ "$response" == "[]" ]; then
+            _success "User $username deleted."
         else
-            # Check if response contains password policy validation error
-            if [[ "$(echo "$response" | jq -r '.password[0].code')" == "passwordpolicy" ]]; then
-                # _note "Password policy validation error found. Invoking get_app_password function."
-                _error "Failed to create app user"
-                echo "$response"
-                sleep 2
-                _note "Password policy validation error found. Provide a stronger password"
-                sleep 2
-                get_app_password
-
-                # Fetch new password and rerun create_app_users with the new password
-                create_app_users 
-                return  # Exit the loop after rerunning create_app_users with the new password
+            retry_count=0
+            while [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]] && [ $retry_count -lt $max_retries ]; do
+                _note "An operation is already in progress on Server: $server"
+                echo ""
+                _note "Putting the script to sleep.."
+                echo ""
+                sleep 10
+                _note "Trying again..."
+                echo ""
+                _note "Running for $server: $app"
+                response=$(curl -s -X DELETE --location "$BASE_URL/app/creds/$app_cred_id" \
+                    --header 'Content-Type: application/x-www-form-urlencoded' \
+                    --header 'Accept: application/json' \
+                    --header 'Authorization: Bearer '$access_token'' \
+                    -d 'server_id='$server'&app_id='$app'&username='$username'')
+                ((retry_count++))
+            done
+    
+            if [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]]; then
+                _error "Operation failed after $max_retries retries. Another operation is running on the server."
+                _error "Failed to delete $username"
+                echo "$server: $app" >> "$dir/deletion_error.txt"
+                is_deleted=false
+                continue
             else
-                # Print the message from the response directly
-                _error "Failed to create app user"
+                _error "Failed to delete $username."
+                echo "$server: $app" >> "$dir/deletion_error.txt"
                 echo "$response"
-                return
-                # Handle other error conditions as per your requirements
+                is_deleted=false
             fi
         fi
 
-        # Handle case where operation is already in progress
-        while [[ "$(echo "$response" | jq -r '.message')" =~ ^"An operation is already in progress" ]]; do
-            _note "An operation is already in progress on Server: $server"
-            echo ""
-            _note "Putting the script to sleep.."
-            echo ""
-            sleep 10
-            _note "Trying again..."
-            echo ""
-            _note "Running for $server: $app"
-            response="$(curl -X POST --location "$BASE_URL/app/creds" \
-                --header 'Content-Type: application/x-www-form-urlencoded' \
-                --header 'Accept: application/json' \
-                --header 'Authorization: Bearer '$access_token'' \
-                -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
-        done
-
         _note "Putting script to sleep to respect API rate limit."
         sleep 5
-    _success "App users created for all project applications."
-    export_app_users
     done
+    if [ "$is_deleted" == true ]; then
+        _success "App users deleted for all project applications."
+    else
+        sleep 3
+        echo ""
+        _note "Failed deleted users exported in deletion_error.txt"
+    fi
 }
-
-
-export_app_users(){
-    # Export app users in JSON format and write it to the file
-    printf '{"app_users":[%s]}\n' "$(IFS=','; echo "${app_users[*]}")" > app_users.json
-    _note "Users exported in app_users.json file."
-}
+get_app_user_ids
 get_user_credentials
 get_token
-get_project_id
-verify_project_id
-get_app_password
-get_apps
-create_app_users
+delete_app_users

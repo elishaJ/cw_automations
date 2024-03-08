@@ -74,3 +74,5 @@ cython_debug/
 **/sandbox/
 **/.keys/
 client/prod/project_management/api/app_users.json
+client/prod/project_management/api/deletion_error.txt
+client/prod/project_management/api/fetch_data.sh
