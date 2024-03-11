@@ -77,3 +77,6 @@ client/prod/project_management/api/app_users.json
 client/prod/project_management/api/deletion_error.txt
 client/prod/project_management/api/fetch_data.sh
 client/prod/project_management/api/token_expiry.sh
+**/task_id.txt
+**/output.txt
+**/project_apps.json

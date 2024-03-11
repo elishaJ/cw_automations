@@ -28,17 +28,16 @@ function _note()
 }
 
 get_email() {
-    
+    read -p "Enter primary email: " email
     if [ -z $email ]; then
-        read -p "Enter primary email: " email
         get_email
     fi
 }
 
 get_apiKey() {
+    read -sp "Enter API key: " api_key
+    echo " "
     if [ -z $api_key ]; then
-        read -sp "Enter API key: " api_key
-        echo " "
         get_apiKey
     fi
 }

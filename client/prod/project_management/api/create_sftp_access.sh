@@ -13,6 +13,7 @@ app_users=()
 usercount=0
 max_retries=10
 is_created=true
+dir=$(pwd)
 
 function _success()
 {
@@ -29,31 +30,31 @@ function _note()
 }
 
 get_email() {
-    if [ -z $email ]; then
     read -p "Enter primary email: " email
+    if [ -z $email ]; then
         get_email
     fi
 }
 
 get_apiKey() {
+    read -sp "Enter API key: " api_key
+    echo " "
     if [ -z $api_key ]; then
-        read -sp "Enter API key: " api_key
-        echo " "
         get_apiKey
     fi
 }
 
 get_app_password() {
+    read -sp "Enter password for app users: " password
+    echo " "
     if [ -z $password ]; then
-        read -sp "Enter password for app users: " password
-        echo " "
         get_app_password
     fi
 }
 
 get_project_id() {
+    read -p "Enter project ID: " project_id
     if [ -z $project_id ]; then
-        read -p "Enter project ID: " project_id
         get_project_id
     fi
 }
@@ -120,25 +121,21 @@ check_token_validity() {
     fi
 }
 
-get_apps() {
+get_project_apps() {
     _note "Fetching app info"
     apps_response=$(curl -s --location ''$qwik_api'/apps?project_id='$project_id'' \
         --header 'Authorization: Bearer '$access_token'')
 
-    app_ids=$(echo "$apps_response" | jq -r '.apps[].id')
-    server_ids=$(echo "$apps_response" | jq -r '.apps[].server_id')
-    sys_users=$(echo "$apps_response" | jq -r '.apps[].sys_user')
-
-    IFS=$'\n' read -d '' -r -a app_ids_array <<<"$app_ids"
-    IFS=$'\n' read -d '' -r -a server_ids_array <<<"$server_ids"
-    IFS=$'\n' read -d '' -r -a sys_users_array <<<"$sys_users"
+    readarray -t app_ids < <(echo "$apps_response" | jq -r '.apps[].id')
+    readarray -t server_ids < <(echo "$apps_response" | jq -r '.apps[].server_id')
+    readarray -t sys_users < <(echo "$apps_response" | jq -r '.apps[].sys_user')
 }
 
 create_app_users() {
-    for i in "${!server_ids_array[@]}"; do 
-        app=${app_ids_array[i]}
-        server=${server_ids_array[i]}
-        db=${sys_users_array[i]}
+    for i in "${!server_ids[@]}"; do 
+        app=${app_ids[i]}
+        server=${server_ids[i]}
+        db=${sys_users[i]}
         if [ "$usercount" -gt 0 ]; then
             username="$db-admin$usercount"
         else
@@ -153,8 +150,6 @@ create_app_users() {
             --header 'Accept: application/json' \
             --header 'Authorization: Bearer '$access_token'' \
             -d 'server_id='$server'&app_id='$app'&username='$username'&password='$password'')"
-
-
 
         # Handle case where operation is already in progress
         retry_count=0
@@ -198,7 +193,7 @@ create_app_users() {
 
                 # Fetch new password and rerun create_app_users with the new password
                 create_app_users 
-                return  # Exit the loop after rerunning create_app_users with the new password
+                return  # Exit the loop
             
             elif [[ "$(echo "$response" | jq -r '.message')" == "username already exists" ]]; then
                 _error "Failed to create user $username"
@@ -206,7 +201,7 @@ create_app_users() {
                 # echo "Changing app username."
                 let "usercount=usercount+1"
                 sleep 2
-                _note "Changing username to admin$usercount"
+                _note "Changing username suffix to admin$usercount"
                 sleep 2
                 create_app_users
                 return
@@ -246,10 +241,11 @@ export_app_users(){
     printf '{"app_users":[%s]}\n' "$(IFS=','; echo "${app_users[*]}")" > app_users.json
     _note "Users exported in app_users.json file."
 }
+
 get_user_credentials
 get_token
 get_project_id
 verify_project_id
-get_apps
+get_project_apps
 get_app_password
 create_app_users

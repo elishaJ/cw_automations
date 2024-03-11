@@ -10,8 +10,9 @@ _blue=$(tput setaf 38)
 _reset=$(tput sgr0)
 dir=$(pwd)
 key_path="$HOME/.ssh/bulk_ssh_ops"
+BASE_URL="https://api.cloudways.com/api/v1"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
-declare -a server_ids=()
+# declare -a server_ids=()
 
 # Function definitions
 function _note()
@@ -36,11 +37,12 @@ get_email() {
 
 get_apiKey() {
     read -sp "Enter API key: " api_key
-        echo " "
+    echo " "
     if [ -z $api_key ]; then
         get_apiKey
     fi
 }
+
 get_user_credentials() {
     get_email
     get_apiKey
@@ -48,11 +50,12 @@ get_user_credentials() {
 
 get_token() {
     _note "Retrieving access token"
-    response=$(curl -s -X POST --location "$qwik_api/token" \
-    -w "%{http_code}" \
-    --header 'Content-Type: application/x-www-form-urlencoded' \
-    --data-urlencode 'email='$email'' \
-    --data-urlencode 'api_key='$api_key'')
+
+    response=$(curl -s -X POST --location "$BASE_URL/oauth/access_token" \
+        -w "%{http_code}" \
+        --header 'Content-Type: application/x-www-form-urlencoded' \
+        --data-urlencode 'email='$email'' \
+        --data-urlencode 'api_key='$api_key'')
 
     http_code="${response: -3}"
     body="${response::-3}"
@@ -63,11 +66,23 @@ get_token() {
         get_user_credentials
         get_token
     else
-        access_token=$(echo "$body" | jq -r '.[]')
+        # Parse the access token and set expiry time to 10 seconds
+        access_token=$(echo "$body" | jq -r '.access_token')
+        expires_in=$(echo "$body" | jq -r '.expires_in')
+        expiry_time=$(( $(date +%s) + $expires_in ))
         _success "Access token generated."
     fi
 }
 
+check_token_validity() {
+    current_time=$(date +%s)
+    if [ "$current_time" -ge "$expiry_time" ]; then       
+        validity="invalid"
+        is_valid=false
+        # echo "Token has expired"
+        get_token
+    fi
+}
 get_server_IPs() {
     ips=($(curl -s --location "$qwik_api/servers/ips" \
     --header 'Authorization: Bearer '$access_token'' | jq -r '.public_ip[]' ))
@@ -99,7 +114,7 @@ setup_SSH_keys() {
         setup_SSH_keys
     else
         _success "SSH key setup completed successfully"
-        echo "task_id: $task_id" >> $dir/output.txt 
+        echo "task_id: $task_id" >> $dir/task_id.txt 
     fi
     
 }
@@ -120,17 +135,20 @@ do_ssh_task() {
         ###############################################################################################
 EOF
 done;
+echo " "
 _note "Task ID = $task_id"
 _success "Task executed on all servers"
 }
 
 delete_ssh_keys(){
-    get_token
+    check_token_validity
     _note "Deleting SSH keys from servers"
     curl --location --request DELETE "$qwik_api/cleanup" \
     --header 'Content-Type: application/x-www-form-urlencoded' \
     --header 'Authorization: Bearer '$access_token'' \
     --data-urlencode 'task_id='$task_id''
+    _note "Deleting local SSH key"
+    rm -f $key_path*
 }
 
 get_user_credentials
