@@ -1,0 +1,566 @@
+source $HOME/.bashrc;
+clear;
+#Print coffee cup
+echo ""
+echo -e "\e[33m   ( ("
+echo -e "\e[33m    ) )"
+echo -e "\e[33m  ........"
+echo -e "\e[33m  |      |]"
+echo -e "\e[33m  \      /"
+echo -e "\e[33m   \`----'"
+if [ "$(whoami)" = "root" ]; then
+    echo -ne "\e[36m debug init "
+    for ((i=0; i<3; i++)); do
+    echo -ne "."
+    sleep 0.4  # Adjust the sleep duration as desired
+    done
+    echo ""
+	echo ""
+else
+        sleep 1;
+	echo -e "\e[36m Mi maestro!"
+        echo ""
+fi
+
+# MY ALIASES
+alias q="if [ -e /tmp/apm.sh ]; then rm /tmp/apm.sh*; fi; exit"
+alias fqdn="hostname"
+alias chkbkerrors="cat /etc/ansible/facts.d/backup.fact"
+alias bkerrors="cat /etc/sensu/plugins/data/backup_errors.json"
+alias lsapps="cd /home/master/applications/; ls;"
+alias chkload="cd /tmp; wget https://raw.githubusercontent.com/elisha-cloudways/my-scripts/main/apm.sh;"
+alias chkdu="curl -s https://raw.githubusercontent.com/elisha-cloudways/my-scripts/main/chkdu.sh | bash"
+alias wkthreads="sudo systemctl set-property apache2.service TasksMax=infinity; sudo /etc/init.d/apache2 restart;"
+alias sqlconf="vim /etc/mysql/conf.d/custom-manual.cnf"
+alias chkredis-maxmem="redis-cli info memory | grep maxmemory_human"
+alias chkredis-usage="redis-cli info memory | grep used_memory_human"
+alias chkredis="redis-cli ping"
+
+# MY FUNCTIONS
+chkhost(){
+	local db=$(pwd | awk -F "/" '{print $5}');
+	sudo -u $db curl -s -o chkwr.php https://gist.githubusercontent.com/elisha-cloudways/d1da06c5a5bdf162e3a6360bdb42506a/raw/8654a0f9aed546bdecc237543414540e691b0418/chkhost.php;
+	echo -e Test here: https://$(head -n 1 /home/master/applications/$db/conf/server.nginx | awk '{print $NF}' | sed -r 's/;//';)/chkwr.php;
+}
+
+chkip(){
+	dig @4.2.2.2 +short $1;
+}
+db () {
+	local DBname=$(pwd | awk -F "/" '{print $5}');
+	echo "$DBname";
+}
+
+approot () {
+	cd /home/master/applications/$(db)/public_html;
+}
+
+appdb () {
+        local HOMEDIR=/home/$(hostname)
+        local dbname=$(grep -lr "$(echo -e "$1" | sed -e 's|^[^/]*//| |' -e 's|/.*$||')" $HOMEDIR/*/conf 2> /dev/null | \
+                awk 'END{split($0,a,"/"); print a[4]}');
+        if [[ -z "$dbname" ]]; then
+		echo -e "$(tput setaf 1)\033[1mFailed\033[0m: $(tput setaf 7)URL does not exist on this server."
+	else
+		echo -e "$(tput setaf 2)\033[1mDB\033[0m: $(tput setaf 7)$dbname"
+		cd /home/master/applications/$dbname/public_html/;
+	fi;
+        }
+
+app (){
+	cd /home/master/applications/$1/public_html;
+}
+
+uncache(){
+        if redis-cli ping > /dev/null 2>&1;
+        then
+                redis-cli flushall > /dev/null;
+                echo -e "$(tput setaf 2)\033[1mSuccess\033[0m: $(tput setaf 7)Redis cache flushed"
+        fi
+        if wp core version >/dev/null 2>&1;
+        then
+                wp cache flush > /dev/null;
+                echo -e "$(tput setaf 2)\033[1mSuccess\033[0m: $(tput setaf 7)WP cache flushed"
+                rm -rf ./wp-content/cache/*;
+                echo -e "$(tput setaf 2)\033[1mSuccess\033[0m: $(tput setaf 7)wp-content/cache removed"
+        elif php bin/magento --version >/dev/null 2>&1;
+        then
+                php bin/magento cache:clean;
+                php bin/magento cache:flush;
+        elif php artisan --version >/dev/null 2>&1;
+        then
+                php artisan optimize:clear
+        fi
+}
+
+dbdump (){
+	mysqldump --no-create-db -u $1 -p $1 > $1-db.sql
+}
+
+dbimport (){
+	mysql -u $1 -p $1 < $2
+}
+
+confirmation(){
+        echo $(tput setaf 3)$'\n'Source = $(tput setaf 7)$oldURL $'\n'$(tput setaf 3)Destination = $(tput setaf 7)$newURL $'\n'Do you wish to $(tput setaf 1)proceed$(tput setaf 7)?;
+        PS3='Please enter your choice: '
+        options=("Yes" "Re-enter Source URL" "Re-enter Destination URL")
+        select opt in "${options[@]}"
+        do
+        case $opt in
+        "Yes")
+                break
+                ;;
+        "Re-enter Source URL")
+                read -p "Enter Old URL: " oldURL;
+                confirmation;  
+                break
+                ;;
+        "Re-enter Destination URL")
+                read -p "Enter New URL: " newURL;
+                confirmation;  
+                break
+                ;;
+        *) echo $(tput setaf 1)Invalid option $(tput setaf 7)$REPLY;;
+    esac
+done
+}
+
+wpsr (){
+	local oldURL=$1;
+	local newURL=$2;
+	wp search-replace $oldURL $newURL --all-tables --dry-run;
+	confirmation;
+	echo $'\n'Running search and replace...
+	wp search-replace $oldURL $newURL --all-tables;
+	wp cache flush;
+	
+}
+
+url (){
+	head -n 1 /home/master/applications/$1/conf/server.nginx | awk '{print $NF}' | sed -r 's/;//';
+}
+
+bkpoints (){
+	local dbname=$1;
+	sudo /var/cw/scripts/bash/duplicity_restore.sh --src $dbname -c;
+}
+
+trunclog (){
+	if [ -e "/var/log/$1" ]; then
+	sudo tail -50 /var/log/$1 > /tmp/trunclog.tmp; 
+	sudo mv /tmp/trunclog.tmp /var/log/$1;
+	echo -e "$(tput setaf 2)\033[1mSuccess\033[0m: $(tput setaf 7) /var/log/$1 truncated"
+	else 
+		echo "File doesn't exist";
+fi
+}
+
+# grep something from syslog
+chksyslog (){
+	sudo cat /var/log/syslog | grep $1;
+}
+
+# grep something from syslog + all syslog.gz files
+chksyslogz (){
+	sudo zgrep $1 /var/log/syslog*;
+}
+
+master (){
+	mu=$(grep '/home/master' /etc/passwd | cut -d ':' -f 1);
+	#cp /tmp/.myvars /home/master/.vars;
+	setfacl -m u:$mu:r /tmp/.myvars;
+	sudo -i -u $mu bash --rcfile /tmp/.myvars;
+}
+
+chksums (){
+	wp core verify-checksums --allow-root;
+}
+
+chkssl (){
+	certbot certonly --dry-run --text --non-interactive --webroot -w /opt/letsencrypt --no-self-upgrade -d $1 --agree-tos
+}
+
+srv-status () {
+	echo "$(tput bold)$(tput setaf 1)Nginx:$(tput sgr0)"
+	/etc/init.d/nginx status | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)Varnish:$(tput sgr0)"
+	systemctl status varnish | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)Apache:$(tput sgr0)"
+	/etc/init.d/apache2 status | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)PHP-FPM:$(tput sgr0)"
+	/etc/init.d/$(php -v | awk '{print "php"substr($2,1,3)"-fpm";exit}') status | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)MySQL/MariaDB:$(tput sgr0)"
+	/etc/init.d/mysql status | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)Memcache:$(tput sgr0)"
+	/etc/init.d/memcached status | awk '/Active/ {$1="";print $0}'
+	echo "$(tput bold)$(tput setaf 1)Redis:$(tput sgr0)"
+	( /etc/init.d/redis-server status | awk '/Active/ {$1="";print $0}' ) 2> /dev/null
+	} 
+
+# Restart all services
+srv-restart () {
+	/etc/init.d/nginx restart
+	/etc/init.d/varnish restart
+	/etc/init.d/apache2 restart
+	/etc/init.d/$(php -v | awk '{print "php"substr($2,1,3)"-fpm";exit}') restart
+	#/etc/init.d/php$(php -v  | head -n 1 | cut -d " " -f2 | cut -d "." -f1,2)-fpm restart
+	/etc/init.d/mysql restart
+	/etc/init.d/memcached restart
+	/etc/init.d/redis-server restart 2> /dev/null
+	} 
+
+# Restart service menu
+re () {
+    options=("Restart Nginx"
+            "Restart Varnish"
+            "Restart Apache"
+            "Restart PHP-FPM"
+            "Restart MySQL"
+            "Restart Elastic Search"
+            "Restart Redis Server"
+            "Exit")
+
+    selected=0
+    while true; do
+        clear
+        echo "Select service:"
+        for i in "${!options[@]}"; do
+            if [ $i -eq $selected ]; then
+                #echo " > ${options[$i]}"
+		echo -e " \e[33m>\e[34m ${options[$i]}\e[0m"
+            else
+                echo "   ${options[$i]}"
+            fi
+        done
+
+        read -n1 input
+        case "$input" in
+            $'\x1b') # Escape key
+                read -rsn2 input
+                case "$input" in
+                    "[A") # Up arrow key
+                        selected=$(( (selected - 1 + ${#options[@]}) % ${#options[@]} ))
+                        ;;
+                    "[B") # Down arrow key
+                        selected=$(( (selected + 1) % ${#options[@]} ))
+                        ;;
+                esac
+                ;;
+            "") # Enter key
+                break
+                ;;
+        esac
+    done
+
+    case $selected in
+        0)
+            /etc/init.d/nginx restart
+            ;;
+        1)
+            /etc/init.d/varnish restart
+            ;;
+        2)
+            /etc/init.d/apache2 restart
+            ;;
+        3)
+            /etc/init.d/$(php -v | awk '{print "php"substr($2,1,3)"-fpm";exit}') restart
+            ;;
+        4)
+            /etc/init.d/mysql restart
+            ;;
+        5)
+            /etc/init.d/elasticsearch restart
+            ;;
+        6)
+            /etc/init.d/redis-server restart 2> /dev/null
+            ;;
+        7)
+            echo "Exiting..."
+            return
+            ;;
+    esac
+
+    echo ""
+}
+
+# Tail apache error logs - Original
+a2etail (){
+	#local db=$(pwd | awk -F "/" '{print $5}')
+	approot;
+	echo -e "\n\n\e[31m ----- APACHE ERROR LOGS -----\e[0m \n\n"
+	tail -f /home/master/applications/$(db)/logs/apache_*.error.log
+}
+
+a2egreptail (){
+    #local db=$(pwd | awk -F "/" '{print $5}')
+    if [ -z "$1" ]; then
+        echo "Nothing to filter..."
+	else
+		approot;
+        echo -e "\n\n\e[31m ----- APACHE ERROR LOGS -----\e[0m \n\n"
+        tail -f /home/master/applications/$(db)/logs/apache_*.error.log | grep "$1"
+	fi
+}
+
+a2egrep (){
+    #local db=$(pwd | awk -F "/" '{print $5}')
+    if [ -z "$1" ]; then
+            echo "Nothing to filter..."
+    else
+            approot;
+            echo -e "\n\n\e[31m ----- APACHE ERROR LOGS -----\e[0m \n\n"
+            cat /home/master/applications/$(db)/logs/apache_*.error.log | grep "$1" | tail -n 20
+    fi
+}
+
+
+# Tail apache access logs
+a2atail (){
+        #local db=$(pwd | awk -F "/" '{print $5}')
+	approot;
+	echo -e "\n\n\e[33m ----- APACHE ACCESS LOGS -----\e[0m \n\n"
+        tail -f /home/master/applications/$(db)/logs/apache_*.access.log
+}
+
+a2agreptail (){
+	if [ -z "$1" ]; then
+        echo "Nothing to filter..."
+    else
+		approot;
+        echo -e "\n\n\e[33m ----- APACHE ACCESS LOGS -----\e[0m \n\n"
+        tail -f /home/master/applications/$(db)/logs/apache_*.access.log | grep "$1"
+	fi
+}
+
+a2agrep (){
+        if [ -z "$1" ]; then
+                echo "Nothing to filter..."
+        else
+            approot;
+            echo -e "\n\n\e[33m ----- APACHE ACCESS LOGS -----\e[0m \n\n"
+            cat /home/master/applications/$(db)/logs/apache_*.access.log | grep "$1" | tail -n 20
+        fi
+}
+
+# Tail PHP slow logs
+phpslow (){
+        #local db=$(pwd | awk -F "/" '{print $5}')
+	approot;
+        echo -e "\n\n\e[33m ----- PHP SLOW LOGS -----\e[0m \n\n"
+	tail -f /home/master/applications/$(db)/logs/php-app.slow.log
+}
+
+# Tail syslogs
+syslog (){
+    echo -e "\n\n\e[33m -----  SYSLOGS  -----\e[0m \n\n"
+    tail -f /var/log/syslog 
+}
+
+# Tail wp-content logs
+chkwplog (){
+    #local db=$(pwd | awk -F "/" '{print $5}')
+    approot;
+    echo -e "\n\n\e[31m ----- WP DEBUG LOGS -----\e[0m \n\n"
+    tail -f /home/master/applications/$(db)/public_html/wp-content/debug.log;
+}
+wp () {
+	/usr/local/bin/wp "$@" --allow-root
+	}
+
+wpreset () {
+	echo -e "\n\e[33m ----- Checking core version -----\e[0m"
+	wp core version --skip-plugins --skip-themes 2> /dev/null;
+	local core_version=$(wp core version --skip-plugins --skip-themes 2> /dev/null);
+	wp core download --skip-content --force --allow-root --version=$core_version
+}
+
+htreset () {
+	approot;
+	find . -name .htaccess -exec rm {} \;
+	dw_wp_htaccess;
+}
+
+dw_wp_htaccess () {
+	local db=$(pwd | awk -F "/" '{print $5}');
+	sudo -u $db curl -s -o .htaccess https://gist.githubusercontent.com/elisha-cloudways/3764db30aed700b694226b2ca7a4dc28/raw/8e2569bba1745054a2b4aa7919f7e0abb8600609/default-wp-htaccess.txt;
+}
+
+htreplace () {
+	approot;
+	mv .htaccess ".htaccess_$(db).backup";
+	dw_wp_htaccess;
+}
+
+concurr () {
+	watch -xtn 0.5 awk '$2 ~ /:0050|:01BB/ && $4 ~ /01/ {count +=1;} END {print "Concurrent Web Connections: ",count}' /proc/net/tcp
+	}
+
+sqlvars () {
+	mysqladmin variables | tr -d " " | awk -F'|' '{print $2 " = " $3}' | grep $1;
+	}
+
+hr () {
+	expr $1 + 0 | numfmt --to=iec;
+}
+
+sqltuner () {
+	cd /tmp;
+	wget -q https://raw.githubusercontent.com/major/MySQLTuner-perl/master/mysqltuner.pl;
+	chmod +x mysqltuner.pl;
+	./mysqltuner.pl > tuner.txt;
+	cat tuner.txt | grep -A 100 'General recommendations'
+	rm /tmp/mysqltuner.pl /tmp/tuner.txt;
+}
+
+wpdebug () {
+	approot;
+	if [[ "$1" == "off" ]]; then
+		wp config set WP_DEBUG false --raw
+                wp config set WP_DEBUG_LOG false --raw
+	else 
+		wp config set WP_DEBUG true --raw;
+                wp config set WP_DEBUG_LOG true --raw;
+                wp config set WP_DEBUG_DISPLAY false --raw;
+	fi
+}
+
+wpconf () {
+	approot;
+	vim wp-config.php
+}
+
+nginxconf () {
+	if [[ -f "/etc/nginx/sites-available/$1" ]]; then
+		vim /etc/nginx/sites-available/$1;
+	else
+		echo "File $1 does not exist"
+    fi
+}
+
+m2-permissions () {
+	approot;
+	find . -type d -print0 | xargs -0 chmod 0775
+	find . -type f -print0 | xargs -0 chmod 0664
+	find ./var -type d -exec chmod 777 {} \;
+	find ./pub/media -type d -exec chmod 777 {} \;
+	find ./pub/static -type d -exec chmod 777 {} \;
+	chmod 777 ./app/etc
+	chmod 644 ./app/etc/*.xml
+	chmod u+x bin/magento
+}
+
+sshconf () {
+	vim /etc/ssh/sshd_config;
+}
+
+chown-app () {
+	local db="$1";
+	chown -R $db:www-data /home/master/applications/$db/public_html;
+}
+
+chown-master () {
+	local mu=$(grep '/home/master' /etc/passwd | cut -d ':' -f 1);
+	local db="$1";
+	chown -R $mu:www-data /home/master/applications/$db/public_html;
+}
+
+reset-filemods () {
+	find -type d -exec chmod 775 {} ';'
+	find -type f -exec chmod 664 {} ';'	
+}
+perms-app () {
+	approot;
+	reset-filemods;
+	chown-app "$(db)";
+}
+
+perms-master () {
+        approot;
+        reset-filemods;
+        chown-master "$(db)";
+}
+
+m2 () {
+    approot;
+    mu=$(grep '/home/master' /etc/passwd | cut -d ':' -f 1);
+    options=("Upgrade"
+            "Redeploy static content"
+            "Compile"
+            "Reindex"
+            "Exit")
+
+    selected=0
+    while true; do
+        clear
+        echo "Select Magento command:"
+        for i in "${!options[@]}"; do
+            if [ $i -eq $selected ]; then
+                echo -e " \e[33m>\e[34m ${options[$i]}\e[0m"
+            else
+                echo "   ${options[$i]}"
+            fi
+        done
+
+        read -n1 input
+        case "$input" in
+            $'\x1b') # Escape key
+                read -rsn2 input
+                case "$input" in
+                    "[A") # Up arrow key
+                        selected=$(( (selected - 1 + ${#options[@]}) % ${#options[@]} ))
+                        ;;
+                    "[B") # Down arrow key
+                        selected=$(( (selected + 1) % ${#options[@]} ))
+                        ;;
+                esac
+                ;;
+            "") # Enter key
+                break
+                ;;
+        esac
+    done
+
+    case $selected in
+        0)
+        # echo "Running 'php bin/magento setup:upgrade'..."
+            sudo -u $mu php bin/magento setup:upgrade
+            ;;
+        1)
+        # echo "Running 'php bin/magento setup:static-content:deploy -f'..."
+            sudo -u $mu php bin/magento setup:static-content:deploy -f
+            ;;
+        2)
+            #echo "Running 'php bin/magento setup:di:compile'..."
+            sudo -u $mu php bin/magento setup:di:compile
+            ;;
+        3)
+            #echo "Running 'php bin/magento indexer:reindex'..."
+            sudo -u $mu php bin/magento indexer:reindex
+            ;;
+        4)
+            echo "Exiting..."
+            return
+            ;;
+    esac
+
+    echo "Magento command completed."
+}
+
+wl_adminer () {
+local ip="$1"
+    
+    if [ -z "$ip" ]; then
+        echo "No IP to whitelist"
+        return 1
+    fi
+
+    # Append the PARAM line to the file
+    echo -e "PARAM\tnet:$ip" >> /etc/shorewall/macro.ADMINER
+    if /sbin/shorewall check > /dev/null 2>&1; then
+        /sbin/shorewall reload > /dev/null 2>&1
+	echo "Whitelisted $ip for Adminer"
+    else 
+	echo "Check /etc/shorewall/macro.ADMINER file"
+    fi
+}

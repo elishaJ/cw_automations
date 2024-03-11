@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Author: Elisha
+# Purpose: Template for project management via Cloudways API. Perform API task for all applications in a project.
 clear
 
 _bold=$(tput bold)
