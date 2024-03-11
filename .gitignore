@@ -80,3 +80,4 @@ client/prod/project_management/api/token_expiry.sh
 **/task_id.txt
 **/output.txt
 **/project_apps.json
+**/failed_apps.txt

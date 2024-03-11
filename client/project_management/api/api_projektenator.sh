@@ -171,9 +171,17 @@ enable_cron_optimizer() {
 
             # Wait for the operation to complete
             while true; do
-                operation_status=$(curl -s "$BASE_URL/operation/$operation_id" --header 'Authorization: Bearer '$access_token'' | jq -r '.operation.status')
+                operation_response=$(curl -s "$BASE_URL/operation/$operation_id" --header 'Authorization: Bearer '$access_token'')
+                operation_status=$(echo $operation_response | jq -r '.operation.status')
+                is_completed=$(echo $operation_response | jq -r '.operation.is_completed')
                 if [ "$operation_status" == "Operation completed" ]; then
                     _success "Cron optimizer enabled for app ID: $app_id"
+                    break
+                fi
+                if [ "$is_completed" == "-1" ]; then
+                    operation_message=$(curl -s "$BASE_URL/operation/$operation_id" --header 'Authorization: Bearer '$access_token'' | jq -r '.operation.message')
+                    _error "Operation failed for app ID: $app_id. Error message: $operation_message"
+                    echo $app_id > $dir/failed_apps.txt
                     break
                 fi
                 sleep 5
