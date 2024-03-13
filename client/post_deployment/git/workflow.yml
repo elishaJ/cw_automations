@@ -1,0 +1,58 @@
+name: Git pull automation
+on: [push]
+
+env:
+  app_id: 4381141
+  server_id: 1208649
+  branch_name: main
+  deploy_path: wp-content/plugins/amelia-extension
+
+jobs:
+  post_git_deployment_task:
+    runs-on: ubuntu-latest
+    name: Post Git deployment SSH task
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Pull Git Repo
+        id: git-pull
+        uses: elishaJ/cloudways-git-pull@v1
+        continue-on-error: false
+        with:
+          EMAIL: ${{ secrets.CLOUDWAYS_EMAIL }}
+          API_KEY: ${{ secrets.CLOUDWAYS_API_KEY }}
+          APP_ID: ${{ env.app_id }}
+          SERVER_ID: ${{ env.server_id }}
+          BRANCH_NAME: ${{ env.branch_name }}
+          DEPLOY_PATH: ${{ env.deploy_path }}
+
+      - name: SSH Key Setup
+        id: ssh-auth-setup
+        if: ${{ steps.git-pull.outputs.is_deployed }} == true
+        uses: elishaJ/cloudways-auth-setup@v1
+        continue-on-error: false
+        with:
+          EMAIL: ${{ secrets.CLOUDWAYS_EMAIL }}
+          API_KEY: ${{ secrets.CLOUDWAYS_API_KEY }}
+          APP_ID: ${{ env.app_id }}
+          SERVER_ID: ${{ env.server_id }}
+
+      - name: SSH task
+        run: | 
+          master_user="${{ steps.ssh-auth-setup.outputs.master-user }}"
+          sys_user="${{ steps.ssh-auth-setup.outputs.sys-user }}"
+          public_ip="${{ steps.ssh-auth-setup.outputs.server-ip }}"
+          key_path="${{ steps.ssh-auth-setup.outputs.key-path }}"
+          ssh -i $key_path -o StrictHostKeyChecking=no $master_user@$public_ip 'bash -s' <<EOF
+          # Task to done on app hosted on the server
+          cd /home/master/applications/$sys_user/public_html/;
+            touch gitaction03-05.txt
+          EOF
+      - name: SSH Key Cleanup
+        if: steps.ssh-auth-setup.outputs.task-id != ''
+        uses: elishaJ/cloudways-auth-cleanup@v1
+        with:
+          EMAIL: ${{ secrets.CLOUDWAYS_EMAIL }}
+          API_KEY: ${{ secrets.CLOUDWAYS_API_KEY }}
+          TASK_ID: ${{ steps.ssh-auth-setup.outputs.task-id }}
