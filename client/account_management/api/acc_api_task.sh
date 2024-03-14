@@ -10,6 +10,7 @@ _blue=$(tput setaf 38)
 _reset=$(tput sgr0)
 
 BASE_URL="https://api.cloudways.com/api/v1"
+task_endpoint="app/manage/cron_setting"
 qwik_api="https://us-central1-cw-automations.cloudfunctions.net"
 app_users=()
 usercount=0
@@ -109,7 +110,7 @@ enable_cron_optimizer() {
                 check_token_validity
                 
                 response=$(curl -s -X POST --header 'Content-Type: application/x-www-form-urlencoded' --header 'Accept: application/json' --header 'Authorization: Bearer '$access_token'' \
-                    -d 'server_id='$server_id'&app_id='$app_id'&status=enable' "$BASE_URL/app/manage/cron_setting")
+                    -d 'server_id='$server_id'&app_id='$app_id'&status=enable' "$BASE_URL/$task_endpoint")
 
                 operation_id=$(echo "$response" | jq -r '.operation_id')
 
@@ -126,7 +127,7 @@ enable_cron_optimizer() {
                     _note "Enabling cron optimizer for app ID: $app_id"
                     check_token_validity
                     response=$(curl -s -X POST --header 'Content-Type: application/x-www-form-urlencoded' --header 'Accept: application/json' --header 'Authorization: Bearer '$access_token'' \
-                        -d 'server_id='$server_id'&app_id='$app_id'&status=enable' "$BASE_URL/app/manage/cron_setting")
+                        -d 'server_id='$server_id'&app_id='$app_id'&status=enable' "$BASE_URL/$task_endpoint")
                     ((retry_count++))
                 done
 

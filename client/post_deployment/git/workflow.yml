@@ -39,6 +39,7 @@ jobs:
           SERVER_ID: ${{ env.server_id }}
 
       - name: SSH task
+        id: ssh-task
         run: | 
           master_user="${{ steps.ssh-auth-setup.outputs.master-user }}"
           sys_user="${{ steps.ssh-auth-setup.outputs.sys-user }}"

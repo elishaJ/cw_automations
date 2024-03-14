@@ -158,8 +158,7 @@ do_ssh_task() {
         ssh -i $key_path -o StrictHostKeyChecking=no ${master_users[$i]}@${server_ips[$i]} 'bash -s' <<EOF
             app=${sys_users[$i]}
             cd /home/master/applications/\$app/public_html/
-            #rm projectramine.sh
-            touch project16-08.txt
+            touch projektenator.txt
 EOF
     done
     echo " "

@@ -130,8 +130,7 @@ do_ssh_task() {
         # Task to done on each app hosted on the server
         for app in $(ls -l /home/master/applications/ | awk '/^d/ {print $NF}'); do
             cd /home/master/applications/$app/public_html/;
-            rm bulkatron.app
-            #chmod 770 bulkatron.app
+            touch bulkatron.txt
             done;
         ###############################################################################################
 EOF
