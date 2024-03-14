@@ -1,5 +1,8 @@
-![MasterHead](https://user-images.githubusercontent.com/74038190/212748842-9fcbad5b-6173-4175-8a61-521f3dbb7514.gif)
-# Cloudways Automations
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/74038190/212748842-9fcbad5b-6173-4175-8a61-521f3dbb7514.gif" alt="MasterHead">
+</div>
+
+<h1 align="center">Cloudways Automations</h1>
 
 Welcome to the Cloudways Automations repository! This repository contains automation scripts tailored to streamline various aspects of managing Cloudways accounts and projects.
 
@@ -83,4 +86,3 @@ A brief description of the layout:
 ## Feedback
 
 If you have any feedback, please reach out to me at elisha.jamil@gmail.com
-
