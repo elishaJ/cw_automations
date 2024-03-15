@@ -27,7 +27,7 @@ The "Server" folder comprises essential tools and scripts aimed at enhancing ser
 ├── client
 │   ├── account_management
 │   │   ├── api
-│   │       └── acc_api_task.sh
+│   │   |   └── acc_api_task.sh
 │   │   └── ssh
 │   │       └── bulkatron.sh
 │   ├── post_deployment
