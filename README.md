@@ -11,7 +11,7 @@ Welcome to the Cloudways Automations repository! This repository contains automa
 **Client**: 
 The main "Client" folder includes automation scripts for account and project management tasks on Cloudways, as well as post-deployment automation for seamless application maintenance.
 
-**Server**
+**Server**:
 The "Server" folder comprises essential tools and scripts aimed at enhancing server management efficiency.
 
 ### Roadmap
