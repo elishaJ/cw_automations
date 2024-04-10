@@ -17,10 +17,10 @@ The "Server" folder comprises essential tools and scripts aimed at enhancing ser
 ### Roadmap
 
 - [x]  Account-wide SSH task automation (all apps + all running servers)
-- [x]  Account-wide Platform task automation using Cloudways API  
+- [x]  Account-wide UI task automation using Cloudways API  
 - [x]  Project-wide SSH task automation (all apps + all running servers)
-- [x] Project-wide platform task using Cloudways API
-- [x] Post Git Deployment automation 
+- [x]  Project-wide UI task automation using Cloudways API
+- [x]  Post-Git Deployment automation
 ### Layout
 
 ```tree
