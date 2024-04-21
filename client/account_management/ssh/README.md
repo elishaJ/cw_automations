@@ -14,7 +14,7 @@ Clone the project
 Go to the project directory
 
 ```bash
-  cd client/account_management/api/
+  cd client/account_management/ssh/
 ```
 
 Prerequisites
